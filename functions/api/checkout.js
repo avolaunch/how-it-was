@@ -22,7 +22,7 @@ export async function onRequestPost({request,env}) {
     'line_items[0][quantity]':'1',
     client_reference_id:id,
     'metadata[record_id]':id,
-    success_url:env.APP_ORIGIN+'/vehicle-transport/capture/?checkout=success',
+    success_url:env.APP_ORIGIN+'/vehicle-transport/complete/',
     cancel_url:env.APP_ORIGIN+'/vehicle-transport/capture/?checkout=cancelled',
   });
   let session;

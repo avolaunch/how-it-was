@@ -1,0 +1,16 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="Completing your record — How It Was" description="Save your paid vehicle condition record.">
+  <section class="capture-shell wrap">
+    <div class="capture-top"><div><span class="section-index">VEHICLE TRANSPORT / ONLINE RECORD</span><h1>Saving your record.</h1></div></div>
+    <div class="capture-panel" id="completion" aria-live="polite">
+      <h2 id="completion-heading">Checking your payment…</h2>
+      <p id="completion-status">Keep this tab open while your photos are uploaded from this device.</p>
+      <div id="completion-actions" class="step-actions" hidden>
+        <button type="button" class="button button-primary" id="retry-completion">Try again</button>
+      </div>
+    </div>
+  </section>
+  <script src="../../scripts/complete.js"></script>
+</Base>

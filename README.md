@@ -44,7 +44,7 @@ The access link is a bearer secret. Anyone with the complete link can view the r
 
 Use Cloudflare secret variables for the three secret values. Do not commit credentials. The online action appears only when every value and binding is present and the Stripe key starts with `sk_test_`. Checkout requests are accepted only on `APP_ORIGIN`.
 
-Test the whole flow with Stripe test payment details on the configured origin. Keep the original browser tab's storage intact through checkout and upload; a paid test session cannot be completed from a different device. The browser can retry an interrupted upload using the same local draft. Save the private access link after finalization.
+Test the whole flow with Stripe test payment details on the configured origin. After checkout, the success page automatically confirms payment and uploads photos from the same browser. Keep that tab open until the private link appears; if interrupted, reopen `/vehicle-transport/complete/` in the original browser to resume without paying again. A paid test session cannot be completed from a different device. Save the private access link after finalization.
 
 ## Costs and limits
 
