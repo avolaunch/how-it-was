@@ -1,0 +1,15 @@
+name = "how-it-was-retention"
+main = "retention.js"
+compatibility_date = "2026-09-28"
+
+[triggers]
+crons = ["0 3 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "how-it-was"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "REPLACE_WITH_PRIVATE_R2_BUCKET_NAME"

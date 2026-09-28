@@ -1,3 +1,4 @@
+import {expired} from './retention.js';
 export const requiredViews = ['front','front_left','driver_side','rear_left','rear','rear_right','passenger_side','front_right'];
 export const optionalViews = ['windscreen','wheels','roof','odometer'];
 const encoder = new TextEncoder();
@@ -47,7 +48,7 @@ export async function authorize(context) {
   const token = context.request.headers.get('authorization')?.replace(/^Bearer /i,'') || '';
   if (!/^[0-9a-f-]{36}$/i.test(id) || !/^[0-9a-f]{64}$/i.test(token)) return null;
   const row = await context.env.DB.prepare('SELECT * FROM records WHERE id = ?').bind(id).first();
-  if (!row || row.access_hash !== await sha256(token)) return null;
+  if (!row || row.access_hash !== await sha256(token) || (row.status === 'finalized' && expired(row.finalized_at))) return null;
   return row;
 }
 export function validPhotoKey(key, damage) {

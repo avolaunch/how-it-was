@@ -7,6 +7,7 @@ const { title = 'How It Was', description = 'Document the condition before it ch
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {Astro.url.pathname.startsWith('/admin/') && <meta name="robots" content="noindex, nofollow" />}
     <meta name="theme-color" content="#f8fafc" />
     <meta name="description" content={description} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -19,6 +20,6 @@ const { title = 'How It Was', description = 'Document the condition before it ch
       <nav aria-label="Main navigation"><a href="/#how-it-works">How it works</a><a href="/#uses">Where it helps</a><a class="nav-cta" href="/vehicle-transport/">Try the walkthrough <span aria-hidden="true">↗</span></a></nav>
     </header>
     <main><slot /></main>
-    <footer class="site-footer"><div class="wrap footer-inner"><a class="wordmark" href="/">How It Was</a><p>A clear record of condition at the moments that matter.</p><span>© {new Date().getFullYear()} How It Was</span></div></footer>
+    <footer class="site-footer"><div class="wrap footer-inner"><a class="wordmark" href="/">How It Was</a><p>A clear record of condition at the moments that matter. <a href="mailto:support@howitwas.co">Contact support</a></p><span>© {new Date().getFullYear()} How It Was</span></div></footer>
   </body>
 </html>

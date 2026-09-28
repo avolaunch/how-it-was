@@ -22,7 +22,7 @@ The existing Cloudflare Pages project builds with command `npm run build`, outpu
 4. D1 stores photo metadata and SHA-256 digests. Finalization requires all eight views, writes a JSON manifest to R2, and records its digest and a server receipt time in D1.
 5. A secret access link opens the saved record. The browser fetches private photos and can print or save the record as a PDF.
 
-The access link is a bearer secret. Anyone with the complete link can view the record. There is no account, email recovery, expiry, automatic retention or deletion policy in this test release. The manifest is a server receipt and integrity reference, **not** an independent verification of photo capture time, location, or responsibility. Do not enable live payments until recovery, retention, privacy terms, and support handling are designed and tested.
+The access link is a bearer secret. Anyone with the complete link can view the record. There is no account or automated email recovery. The owner can delete a record using the private link; records become inaccessible one calendar year after finalization. A separate scheduled Worker must be deployed to remove expired D1 rows and R2 objects. The manifest is a server receipt and integrity reference, **not** an independent verification of photo capture time, location, or responsibility. Do not enable live payments until scheduled deletion, recovery, privacy terms, and support handling are configured and tested.
 
 ## Configure the test path in Cloudflare
 
@@ -54,10 +54,16 @@ The browser PDF costs no server processing. It is a summary of what is shown in 
 
 ## Next steps before a real paid launch
 
-- The proposed first price is **£4.99 per vehicle record**, with **12 months of online access**. These are launch decisions, not yet enforced by the site or Stripe; create a separate live-mode price only when launch is ready.
-- Implement expiration and removal of records and photos after 12 months, and define how customers request earlier deletion or a refund.
-- Add a secure recovery method (email or account) and a support contact. The current access token is stored only in the original browser and the private link; its hash cannot be reversed if that link is lost.
+- The proposed first price is **£4.99 per vehicle record**, with **12 months of online access**. Access expiry is enforced in code; the Stripe price and cleanup Worker are not yet live.
+- The support address is `support@howitwas.co`. Confirm forwarding continues to work, and decide how refunds will be handled.
+- A customer with the private link can permanently delete the record and photos. Support can rotate a lost link after verifying the requester against Stripe (instructions below).
 - Add operational cleanup of abandoned payment sessions and orphaned uploads.
 - Test Cloudflare bindings, Stripe webhook delivery, mobile upload interruptions, and PDF output on real devices.
 - Review copy and terms so a server receipt is never described as a verified capture time or proof of liability.
 - Create a live Stripe price and webhook endpoint, update the Cloudflare secrets, and set the two live enable variables only after the customer support and retention paths above are working.
+
+## Retention and manual support recovery
+
+The Pages code denies access after one calendar year from finalization. To physically remove expired records, deploy the separate Worker in `workers/retention.js` with the **same D1 database and private R2 bucket** bound as `DB` and `PHOTOS`. Copy `workers/wrangler.example.toml` to `workers/wrangler.toml`, replace the database ID and bucket name, then deploy with Wrangler using that config. The daily trigger processes up to 20 expired records per run; monitor the Worker logs and increase frequency if volume grows. Until this Worker is deployed, expired data stays stored even though links stop working.
+
+For manual recovery, add a long random `RECOVERY_ADMIN_SECRET` as a Cloudflare Pages **secret**. A support operator must verify that the request really came from the payer (for example, by replying to the address used at Checkout and checking the record ID in Stripe's metadata). Open `/admin/recover/`, enter the record ID, the email used at checkout, and the admin secret. The server fetches that Checkout Session from Stripe and checks its paid status, mode, record ID, and email before rotating the access token. Copy the new private link and send it to the verified payer; the old link stops working. The form does not save the secret. If Stripe does not have the customer's email, the recovery operation refuses to rotate the link.

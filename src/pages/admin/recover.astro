@@ -1,0 +1,37 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="Record recovery — How It Was" description="Support record recovery">
+  <section class="capture-shell wrap">
+    <div class="capture-panel">
+      <span class="section-index">SUPPORT TOOL</span>
+      <h1>Replace a private link</h1>
+      <p>Use this only after checking the customer's request against the payment in Stripe. Replacing the link immediately disables the old one.</p>
+      <form id="recovery-form" class="field-grid">
+        <label class="field full"><span>Record ID</span><input name="id" required autocomplete="off"/></label>
+        <label class="field full"><span>Email used at checkout</span><input name="email" type="email" required autocomplete="off"/></label>
+        <label class="field full"><span>Admin secret</span><input name="secret" type="password" required autocomplete="off"/></label>
+        <button class="button button-primary" type="submit">Replace link</button>
+      </form>
+      <p id="recovery-result" class="online-status" role="status"></p>
+    </div>
+  </section>
+  <script>
+    const form=document.querySelector('#recovery-form');
+    const result=document.querySelector('#recovery-result');
+    form.addEventListener('submit',async event=>{
+      event.preventDefault();
+      const button=form.querySelector('button');button.disabled=true;result.textContent='Checking payment…';
+      const data=new FormData(form);
+      try{
+        const response=await fetch('/api/admin/recover',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+data.get('secret')},body:JSON.stringify({id:data.get('id'),email:data.get('email')})});
+        const body=await response.json();
+        if(!response.ok)throw Error(body.error||'Recovery failed');
+        result.replaceChildren('New private link: ');
+        const link=document.createElement('a');link.href=body.url;link.textContent=body.url;result.append(link);
+        form.querySelector('[name="secret"]').value='';
+      }catch(error){result.textContent=error.message;}
+      finally{button.disabled=false;}
+    });
+  </script>
+</Base>

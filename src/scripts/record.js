@@ -22,7 +22,8 @@ async function load(){
     (m.damage.map(d=>'<div class="mark-review"><div><strong>'+escapeHTML(d.area+' · '+(d.kind||'Mark'))+'</strong><p>'+escapeHTML(d.description)+'</p></div></div>').join('')||'<p>No existing marks were noted. This does not assert that the vehicle is damage-free.</p>')+
     '<div class="notice">SHA-256 manifest digest: <code>'+escapeHTML(data.manifestSha256)+'</code><br/>This is a server-received record, not independent verification of when or where the photos were taken or who caused any change.</div>'+
     '<div class="step-actions"><button type="button" class="button button-primary" id="save-pdf">Print or save PDF ↗</button></div>'+
-    '<p class="record-link-note">Anyone with the complete private link can access this record. Keep it somewhere safe. The link is not recoverable by email in this test version.</p>';
+    '<p class="record-link-note">Anyone with the complete private link can access this record. Keep it somewhere safe. For help, email <a href="mailto:support@howitwas.co">support@howitwas.co</a>.</p>'+
+    '<button type="button" class="subtle-button delete-draft" id="delete-record">Permanently delete this record</button>';
   const grid=document.querySelector('#saved-photos');
   const marks=[...document.querySelectorAll('.mark-review')];
   for(const photo of m.photos){
@@ -42,6 +43,15 @@ async function load(){
     card.append(img,name,hash);grid.append(card);
   }
   document.querySelector('#save-pdf').addEventListener('click',()=>window.print());
+  document.querySelector('#delete-record').addEventListener('click',async()=>{
+    if(!confirm('Permanently delete this record and all its photos? This cannot be undone.'))return;
+    const button=document.querySelector('#delete-record');button.disabled=true;
+    try{
+      const response=await fetch(root,{method:'DELETE',headers});
+      if(!response.ok)throw Error((await response.json()).error||'Deletion failed');
+      target.innerHTML='<div class="notice">This record and its photos have been deleted. Its private link no longer works.</div>';
+    }catch(e){button.disabled=false;alert(e.message);}
+  });
 }
 load().catch(e=>{target.innerHTML='<div class="notice">'+escapeHTML(e.message)+'</div>';});
 window.addEventListener('pagehide',()=>urls.forEach(URL.revokeObjectURL));
