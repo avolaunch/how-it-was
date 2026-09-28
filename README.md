@@ -2,7 +2,7 @@
 
 A static Astro site with a guided vehicle condition walkthrough. The basic draft remains entirely in the visitor's browser: text in localStorage and photos in IndexedDB. It can be printed or saved as a PDF using the browser's print dialog.
 
-An **opt-in Stripe test-mode online record path** is included as Pages Functions. It requires Cloudflare D1, a private R2 bucket, Turnstile, and Stripe test keys. Without all bindings and settings, it is hidden and the local walkthrough continues to work. This code does not accept live Stripe charges.
+An **opt-in Stripe test-mode online record path** is included as Pages Functions. It requires Cloudflare D1, a private R2 bucket, Turnstile, and Stripe test keys. Without all bindings and settings, it is hidden and the local walkthrough continues to work. Live charging also requires a separate, explicit enable flag and the launch work listed below; it is currently disabled.
 
 ## Run the static site locally
 
@@ -42,7 +42,7 @@ The access link is a bearer secret. Anyone with the complete link can view the r
 | `STRIPE_PRICE_ID` | One-time Stripe **test** price ID |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret for this exact webhook endpoint |
 
-Use Cloudflare secret variables for the three secret values. Do not commit credentials. The online action appears only when every value and binding is present and the Stripe key starts with `sk_test_`. Checkout requests are accepted only on `APP_ORIGIN`.
+Use Cloudflare secret variables for the three secret values. Do not commit credentials. The online action appears only when every value and binding is present. Test keys enable only test checkout; a live key also requires `PAYMENT_MODE=live` and `LIVE_PAYMENTS_ENABLED=true`. Do not set either flag until retention, recovery, support, and customer-facing terms are implemented. Checkout requests are accepted only on `APP_ORIGIN`. Test and live webhook events are accepted only when their mode matches the active key.
 
 Test the whole flow with Stripe test payment details on the configured origin. After checkout, the success page automatically confirms payment and uploads photos from the same browser. Keep that tab open until the private link appears; if interrupted, reopen `/vehicle-transport/complete/` in the original browser to resume without paying again. A paid test session cannot be completed from a different device. Save the private access link after finalization.
 
@@ -54,8 +54,10 @@ The browser PDF costs no server processing. It is a summary of what is shown in 
 
 ## Next steps before a real paid launch
 
-- Set a clear price, storage period, deletion and refund policy.
-- Add a recovery method (email or account) and a way to request deletion.
+- The proposed first price is **£4.99 per vehicle record**, with **12 months of online access**. These are launch decisions, not yet enforced by the site or Stripe; create a separate live-mode price only when launch is ready.
+- Implement expiration and removal of records and photos after 12 months, and define how customers request earlier deletion or a refund.
+- Add a secure recovery method (email or account) and a support contact. The current access token is stored only in the original browser and the private link; its hash cannot be reversed if that link is lost.
 - Add operational cleanup of abandoned payment sessions and orphaned uploads.
 - Test Cloudflare bindings, Stripe webhook delivery, mobile upload interruptions, and PDF output on real devices.
 - Review copy and terms so a server receipt is never described as a verified capture time or proof of liability.
+- Create a live Stripe price and webhook endpoint, update the Cloudflare secrets, and set the two live enable variables only after the customer support and retention paths above are working.

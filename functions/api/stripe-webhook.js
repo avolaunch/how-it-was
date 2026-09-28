@@ -1,4 +1,4 @@
-import {fail,json} from '../../server/records.js';
+import {fail,json,paymentMode} from '../../server/records.js';
 const encoder = new TextEncoder();
 
 async function validSignature(payload, header, secret) {
@@ -11,12 +11,13 @@ async function validSignature(payload, header, secret) {
   return signatures.some(sig=>sig.length===expected.length && [...sig].reduce((n,c,i)=>n|(c.charCodeAt(0)^expected.charCodeAt(i)),0)===0);
 }
 export async function onRequestPost({request,env}) {
-  if (!env.DB || !env.STRIPE_WEBHOOK_SECRET) return fail('Unavailable',503);
+  const mode=paymentMode(env);
+  if (!env.DB || !env.STRIPE_WEBHOOK_SECRET || !mode) return fail('Unavailable',503);
   const payload = await request.text();
   if (!await validSignature(payload,request.headers.get('Stripe-Signature'),env.STRIPE_WEBHOOK_SECRET)) return fail('Invalid signature',400);
   let event;
   try {event=JSON.parse(payload);} catch {return fail('Invalid event');}
-  if (event.livemode === false && ['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type)) {
+  if (event.livemode === (mode==='live') && ['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type)) {
     const session=event.data?.object, id=session?.metadata?.record_id;
     if (session?.mode==='payment' && session?.payment_status==='paid' && id && session.id) {
       await env.DB.prepare("UPDATE records SET status = 'paid_pending_upload', paid_at = COALESCE(paid_at, ?) WHERE id = ? AND stripe_session_id = ? AND status = 'pending_payment'")

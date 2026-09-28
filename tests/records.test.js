@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalize,sha256,validPhotoKey,requiredViews} from '../server/records.js';
+import {normalize,sha256,validPhotoKey,requiredViews,paymentMode,configured} from '../server/records.js';
+
+test('live checkout requires an explicit gate and matching key',()=>{
+  const base={DB:{},PHOTOS:{},STRIPE_PRICE_ID:'price_123',STRIPE_WEBHOOK_SECRET:'whsec_123',TURNSTILE_SECRET:'turnstile',TURNSTILE_SITE_KEY:'site',APP_ORIGIN:'https://howitwas.co'};
+  assert.equal(paymentMode({...base,STRIPE_SECRET_KEY:'sk_test_123'}),'test');
+  assert.equal(configured({...base,STRIPE_SECRET_KEY:'sk_live_123'}),false);
+  assert.equal(configured({...base,STRIPE_SECRET_KEY:'sk_live_123',PAYMENT_MODE:'live',LIVE_PAYMENTS_ENABLED:'true'}),true);
+  assert.equal(paymentMode({...base,STRIPE_SECRET_KEY:'sk_test_123',PAYMENT_MODE:'live',LIVE_PAYMENTS_ENABLED:'true'}),'test');
+});
 import {onRequestPost as webhook} from '../functions/api/stripe-webhook.js';
 import {onRequestPut as upload} from '../functions/api/records/[id]/photos/[key].js';
 
@@ -22,13 +30,21 @@ test('webhook rejects tampering and only marks the matching paid session',async(
   const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
   const sig=[...new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(timestamp+'.'+payload)))].map(x=>x.toString(16).padStart(2,'0')).join('');
   let sql='',bindings=[];
-  const env={STRIPE_WEBHOOK_SECRET:secret,DB:{prepare(q){sql=q;return {bind(...args){bindings=args;return {run:async()=>({})};}}}}};
+  const env={STRIPE_SECRET_KEY:'sk_test_123',STRIPE_WEBHOOK_SECRET:secret,DB:{prepare(q){sql=q;return {bind(...args){bindings=args;return {run:async()=>({})};}}}}};
   const request=(body,signature)=>new Request('https://howitwas.co/api/stripe-webhook',{method:'POST',headers:{'Stripe-Signature':signature},body});
   assert.equal((await webhook({request:request(payload,'t='+timestamp+',v1='+sig),env})).status,200);
   assert.match(sql,/stripe_session_id/);
   assert.deepEqual(bindings.slice(1),['record-1','cs_test_123']);
   assert.equal((await webhook({request:request(payload+' ','t='+timestamp+',v1='+sig),env})).status,400);
   assert.equal((await webhook({request:request(payload,'t='+(timestamp-1000)+',v1='+sig),env})).status,400);
+  sql='';
+  const livePayload=JSON.stringify({...event,livemode:true});
+  const liveSig=[...new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(timestamp+'.'+livePayload)))].map(x=>x.toString(16).padStart(2,'0')).join('');
+  assert.equal((await webhook({request:request(livePayload,'t='+timestamp+',v1='+liveSig),env})).status,200);
+  assert.equal(sql,'');
+  env.STRIPE_SECRET_KEY='sk_live_123';env.PAYMENT_MODE='live';env.LIVE_PAYMENTS_ENABLED='true';
+  assert.equal((await webhook({request:request(livePayload,'t='+timestamp+',v1='+liveSig),env})).status,200);
+  assert.match(sql,/stripe_session_id/);
 });
 
 test('photo upload requires a paid bearer token',async()=>{

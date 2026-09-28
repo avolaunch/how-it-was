@@ -6,8 +6,13 @@ export function json(data, status = 200) {
   return new Response(JSON.stringify(data), {status, headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
 }
 export function fail(message, status = 400) { return json({error:message}, status); }
+export function paymentMode(env) {
+  if (env.STRIPE_SECRET_KEY?.startsWith('sk_test_')) return 'test';
+  if (env.STRIPE_SECRET_KEY?.startsWith('sk_live_') && env.PAYMENT_MODE === 'live' && env.LIVE_PAYMENTS_ENABLED === 'true') return 'live';
+  return null;
+}
 export function configured(env) {
-  return Boolean(env.DB && env.PHOTOS && env.STRIPE_SECRET_KEY?.startsWith('sk_test_') && env.STRIPE_PRICE_ID && env.STRIPE_WEBHOOK_SECRET && env.TURNSTILE_SECRET && env.TURNSTILE_SITE_KEY && env.APP_ORIGIN);
+  return Boolean(env.DB && env.PHOTOS && paymentMode(env) && env.STRIPE_PRICE_ID && env.STRIPE_WEBHOOK_SECRET && env.TURNSTILE_SECRET && env.TURNSTILE_SITE_KEY && env.APP_ORIGIN);
 }
 export async function sha256(input) {
   const bytes = typeof input === 'string' ? encoder.encode(input) : input;

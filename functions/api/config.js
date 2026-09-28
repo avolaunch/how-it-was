@@ -1,4 +1,5 @@
-import {configured,json} from '../../server/records.js';
+import {configured,json,paymentMode} from '../../server/records.js';
 export function onRequestGet({env}) {
-  return json({onlineRecords:configured(env),turnstileSiteKey:configured(env)?env.TURNSTILE_SITE_KEY:null});
+  const onlineRecords=configured(env);
+  return json({onlineRecords,turnstileSiteKey:onlineRecords?env.TURNSTILE_SITE_KEY:null,paymentMode:onlineRecords?paymentMode(env):null});
 }
