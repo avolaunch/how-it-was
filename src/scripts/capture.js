@@ -15,6 +15,8 @@ const steps = [
 ];
 const photoLabels = Object.fromEntries(steps.slice(2,10).map(s=>[s.key,s.title.replace('Photograph the ','')]));
 const draftKey = 'hiw-vehicle-draft-v1';
+const pendingKey = 'hiw-pending-online-v1';
+let onlineConfig = null, turnstileToken = '';
 const app = document.querySelector('#capture-app');
 const progressLabel = document.querySelector('#progress-label');
 const progressFill = document.querySelector('#progress-fill');
@@ -43,11 +45,106 @@ async function render(){
   else if(index>=2&&index<=9){const blob=await photoAction('get',step.key);body=`<div class="photo-drop">${blob?`<div><img src="${previewURL(blob)}" alt="Your ${escapeHTML(step.title.toLowerCase())} photo"/><label for="step-photo">Replace photo</label></div>`:`<div><div class="step-icon" aria-hidden="true">◎</div><label for="step-photo">Take or choose a photo</label><p class="photo-hint">One photo for this view · JPEG, PNG or HEIC where supported</p></div>`}<input id="step-photo" type="file" accept="image/*" capture="environment"/></div><div class="inline-alert" role="alert"></div>${actions(true,blob?'Next view':'Save and continue')}`;}
   else if(step.key==='details_photos'){let cards='';for(const [key,label] of [['windscreen','Windscreen'],['wheels','Wheels and tyres'],['roof','Roof'],['odometer','Odometer']]){const blob=await photoAction('get',key);cards+=`<div class="review-card">${blob?`<img src="${previewURL(blob)}" alt="${label}"/>`:`<div class="empty-photo">No photo added</div>`}<strong>${label}</strong><label class="subtle-button" for="detail-${key}">${blob?'Replace':'Add photo'}</label><input id="detail-${key}" type="file" accept="image/*" capture="environment" data-photo-key="${key}" hidden/></div>`;}body=`<div class="review-grid">${cards}</div><div class="field-grid">${field('Odometer reading (km)','odometerKm',draft.vehicle.odometerKm,false,'number','min="0"')}</div><div class="inline-alert" role="alert"></div>${actions()}`;}
   else if(step.key==='damage'){const list=draft.damage.map((d,i)=>`<div class="damage-item"><div><strong>${escapeHTML(d.area)}</strong> · ${escapeHTML(d.kind||'Mark')}<br/><small>${escapeHTML(d.description)}</small>${d.photo?'<br/><small>Photo included</small>':''}</div><button type="button" data-action="remove-damage" data-index="${i}">Remove</button></div>`).join('');body=`<div class="damage-list">${list||'<p>No existing marks added. This does not assert that the vehicle has no damage.</p>'}</div><div class="field-grid">${field('Where is it?','area','',false,'text','placeholder="e.g. Driver door"')}${field('Type of mark','kind','',false,'text','placeholder="e.g. Scratch"')}<label class="field full">Description<textarea name="description" placeholder="Describe its location and appearance"></textarea></label><label class="field full">Close-up photo (optional)<input name="damagePhoto" type="file" accept="image/*" capture="environment"/></label></div><button class="button button-light" type="button" data-action="add-damage">+ Add this mark</button><div class="inline-alert" role="alert"></div>${actions(true,'Review draft')}`;}
-  else {const photos=[];for(const [key,label] of Object.entries(photoLabels)){const blob=await photoAction('get',key);photos.push(`<div class="review-card">${blob?`<img src="${previewURL(blob)}" alt="${escapeHTML(label)}"/>`:'<div class="empty-photo">Missing photo</div>'}<strong>${escapeHTML(label)}</strong><span>${blob?'Captured in this draft':'Not captured'}</span></div>`);}body=`<div class="review-head"><strong>${escapeHTML([draft.vehicle.make,draft.vehicle.model].filter(Boolean).join(' ')||'Vehicle')} · ${escapeHTML(draft.vehicle.registration||'No registration')}</strong><p>${escapeHTML(draft.transport.origin||'Origin not entered')} → ${escapeHTML(draft.transport.destination||'Destination not entered')} · ${escapeHTML(draft.transport.collectionDate||'Date not entered')}</p></div><p><strong>${draft.damage.length} existing mark${draft.damage.length===1?'':'s'} noted</strong></p><div class="review-grid">${photos.join('')}</div><div class="notice"><strong>This is a local draft.</strong> It has no verified server timestamp, permanent backup or tamper-evident seal. Keep your original photos separately.</div><div class="step-actions"><button type="button" class="button button-light" data-action="back">← Edit marks</button><button type="button" class="button button-dark" data-action="print">Print draft summary <span aria-hidden="true">↗</span></button></div><p style="margin-top:30px"><button class="subtle-button" type="button" data-action="restart">Delete this draft and start again</button></p>`;}
+  else {
+    const photos=[];
+    for(const [key,label] of Object.entries(photoLabels)){
+      const blob=await photoAction('get',key);
+      photos.push(`<div class="review-card">${blob?`<img src="${previewURL(blob)}" alt="${escapeHTML(label)}"/>`:'<div class="empty-photo">Missing photo</div>'}<strong>${escapeHTML(label)}</strong><span>${blob?'Captured in this draft':'Not captured'}</span></div>`);
+    }
+    const details=[];
+    for(const [key,label] of [['windscreen','Windscreen'],['wheels','Wheels and tyres'],['roof','Roof'],['odometer','Odometer']]){
+      const blob=await photoAction('get',key);
+      if(blob) details.push(`<div class="review-card"><img src="${previewURL(blob)}" alt="${label}"/><strong>${label}</strong></div>`);
+    }
+    const marks=[];
+    for(const d of draft.damage){
+      const blob=d.photo?await photoAction('get',`damage-${d.id}`):null;
+      marks.push(`<div class="mark-review"><div><strong>${escapeHTML(d.area)} · ${escapeHTML(d.kind||'Mark')}</strong><p>${escapeHTML(d.description)}</p></div>${blob?`<img src="${previewURL(blob)}" alt="Existing mark at ${escapeHTML(d.area)}"/>`:''}</div>`);
+    }
+    const info=[['Registration',draft.vehicle.registration],['Make and model',[draft.vehicle.make,draft.vehicle.model].filter(Boolean).join(' ')],['Year',draft.vehicle.year],['Colour',draft.vehicle.colour],['VIN',draft.vehicle.vin],['Odometer',draft.vehicle.odometerKm?draft.vehicle.odometerKm+' km':''],['Collection date',draft.transport.collectionDate],['Transporter',draft.transport.carrier],['From',draft.transport.origin],['To',draft.transport.destination]];
+    let pending=null;
+    try{pending=JSON.parse(localStorage.getItem(pendingKey)||'null');}catch{localStorage.removeItem(pendingKey);}
+    const online=onlineConfig?.onlineRecords ? `<div class="online-panel"><strong>${pending?'Complete your test record':'Test an online record'}</strong><p>${pending?'After test checkout, upload your saved photos from this device. Keep this browser data until the upload finishes.':'This test-mode path uses Stripe Checkout, then privately stores the photos in Cloudflare R2. Your draft must stay on this device through checkout. No real charge is made with Stripe test cards.'}</p>${pending?'<button class="button button-primary" type="button" data-action="complete-online">Complete online record ↗</button>':`<div id="turnstile-box"></div><button class="button button-primary" type="button" data-action="checkout" disabled>Continue to test checkout ↗</button>`}<p class="online-status" role="status"></p></div>` : '';
+    body=`<div class="review-head"><strong>${escapeHTML([draft.vehicle.make,draft.vehicle.model].filter(Boolean).join(' ')||'Vehicle')} · ${escapeHTML(draft.vehicle.registration||'No registration')}</strong><p>${escapeHTML(draft.transport.origin||'Origin not entered')} → ${escapeHTML(draft.transport.destination||'Destination not entered')} · ${escapeHTML(draft.transport.collectionDate||'Date not entered')}</p></div><div class="summary-details">${info.filter(([,v])=>v).map(([label,value])=>`<div><span>${label}</span><strong>${escapeHTML(value)}</strong></div>`).join('')}</div><h3 class="review-section-title">Exterior views</h3><div class="review-grid">${photos.join('')}</div>${details.length?`<h3 class="review-section-title">Additional views</h3><div class="review-grid">${details.join('')}</div>`:''}<h3 class="review-section-title">Existing marks · ${draft.damage.length}</h3>${marks.join('')||'<p class="no-marks">No existing marks were noted. This does not assert that the vehicle is damage-free.</p>'}<div class="notice"><strong>This is a local draft.</strong> It has no verified server timestamp, permanent backup or tamper-evident seal. Keep your original photos separately.</div><div class="step-actions"><button type="button" class="button button-light" data-action="back">← Edit marks</button><button type="button" class="button button-dark" data-action="print">Print or save PDF <span aria-hidden="true">↗</span></button></div>${online}<p class="delete-draft"><button class="subtle-button" type="button" data-action="restart">Delete this draft and start again</button></p>`;
+  }
   app.innerHTML=`<form class="capture-panel" id="capture-form"><span class="section-index">${index<2?'GETTING READY':index<11?'WALK AROUND':index===11?'CONDITION NOTES':'YOUR LOCAL DRAFT'}</span><h2>${step.title}</h2><p>${step.intro}</p>${body}</form>`;
+  if(step.key==='review' && onlineConfig?.onlineRecords && !localStorage.getItem(pendingKey)) mountTurnstile();
+}
+function onlineStatus(message){
+  const el=app.querySelector('.online-status');
+  if(el) el.textContent=message;
+}
+async function mountTurnstile(){
+  try{
+    if(!window.turnstile){
+      await new Promise((resolve,reject)=>{
+        const script=document.createElement('script');
+        script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        script.async=true;script.onload=resolve;script.onerror=reject;document.head.append(script);
+      });
+    }
+    const target=app.querySelector('#turnstile-box');
+    if(!target) return;
+    turnstileToken='';
+    window.turnstile.render(target,{sitekey:onlineConfig.turnstileSiteKey,
+      callback:token=>{turnstileToken=token;const button=app.querySelector('[data-action="checkout"]');if(button)button.disabled=false;},
+      'expired-callback':()=>{turnstileToken='';const button=app.querySelector('[data-action="checkout"]');if(button)button.disabled=true;}
+    });
+  }catch{onlineStatus('Verification could not load. Please try again later.');}
+}
+async function startCheckout(){
+  if(!turnstileToken) return onlineStatus('Complete the verification first.');
+  const button=app.querySelector('[data-action="checkout"]');
+  button.disabled=true;onlineStatus('Preparing test checkout…');
+  try{
+    for(const key of steps.slice(2,10).map(x=>x.key)) if(!await photoAction('get',key)) throw Error('A required photo is missing from this device.');
+    const response=await fetch('/api/checkout',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({vehicle:draft.vehicle,transport:draft.transport,damage:draft.damage,turnstileToken})});
+    const data=await response.json();
+    if(!response.ok) throw Error(data.error||'Checkout unavailable');
+    localStorage.setItem(pendingKey,JSON.stringify({id:data.id,token:data.token}));
+    location.assign(data.url);
+  }catch(e){onlineStatus(e.message);button.disabled=false;if(window.turnstile)window.turnstile.reset();}
+}
+async function completeOnline(){
+  let pending=null;
+  try{pending=JSON.parse(localStorage.getItem(pendingKey)||'null');}catch{localStorage.removeItem(pendingKey);}
+  if(!pending) return;
+  const root='/api/records/'+encodeURIComponent(pending.id);
+  const headers={authorization:'Bearer '+pending.token};
+  const button=app.querySelector('[data-action="complete-online"]');
+  button.disabled=true;
+  try{
+    onlineStatus('Checking test payment…');
+    const response=await fetch(root,{headers});
+    const record=await response.json();
+    if(!response.ok) throw Error(record.error||'Record unavailable');
+    if(record.status==='pending_payment') throw Error('Payment confirmation has not arrived yet. Wait a moment and try again.');
+    if(record.status==='finalized'){
+      onlineStatus('Your test record is already saved.');
+    }else{
+      if(record.status!=='paid_pending_upload') throw Error('This record is not ready for upload.');
+      const keys=[...steps.slice(2,10).map(x=>x.key),...['windscreen','wheels','roof','odometer'],...draft.damage.filter(d=>d.photo).map(d=>'damage-'+d.id)];
+      let count=0;
+      for(const key of keys){
+        const file=await photoAction('get',key);
+        if(!file){if(count<8 && steps.slice(2,10).some(x=>x.key===key))throw Error('A required photo is missing from this device.');continue;}
+        onlineStatus('Uploading photo '+(++count)+'… Keep this tab open.');
+        const upload=await fetch(root+'/photos/'+encodeURIComponent(key),{method:'PUT',headers:{...headers,'content-type':file.type},body:file});
+        if(!upload.ok) throw Error((await upload.json()).error||'Photo upload failed');
+      }
+      onlineStatus('Finishing the record…');
+      const finish=await fetch(root+'/finalize',{method:'POST',headers});
+      const result=await finish.json();
+      if(!finish.ok) throw Error(result.error||'Finalization failed');
+      onlineStatus('Your private test record is saved. Keep its access link.');
+    }
+    const url='/vehicle-transport/record/?id='+encodeURIComponent(pending.id)+'#'+pending.token;
+    const el=app.querySelector('.online-status');
+    el.innerHTML='Your private test record is ready. <a href="'+url+'">Open and save its access link ↗</a>';
+  }catch(e){onlineStatus(e.message);button.disabled=false;}
 }
 async function setPhoto(key,file){if(!file)return;if(!file.type.startsWith('image/')){error('Please select an image file.');return;}if(file.size>12*1024*1024){error('Choose a photo smaller than 12 MB for this preview.');return;}try{await photoAction('put',key,file);draft.photos[key]={name:file.name,size:file.size,type:file.type};save();await render();}catch{error('This device could not save the photo. Check available storage.');}}
 app.addEventListener('change',async event=>{const input=event.target;if(input.matches('#step-photo'))await setPhoto(steps[draft.step].key,input.files[0]);else if(input.matches('[data-photo-key]'))await setPhoto(input.dataset.photoKey,input.files[0]);});
 app.addEventListener('submit',async event=>{event.preventDefault();const form=event.target;if(!form.reportValidity())return;const key=steps[draft.step].key;if(key==='details'){draft.vehicle={...draft.vehicle,...Object.fromEntries(new FormData(form).entries())};}else if(key==='transport'){draft.transport=Object.fromEntries(new FormData(form).entries());}else if(key==='details_photos'){draft.vehicle.odometerKm=new FormData(form).get('odometerKm')||'';}else if(draft.step>=2&&draft.step<=9){if(!draft.photos[key]){error('Add a photo for this view to continue.');return;}}draft.step=Math.min(steps.length-1,draft.step+1);save();await render();window.scrollTo({top:0,behavior:'smooth'});});
-app.addEventListener('click',async event=>{const button=event.target.closest('[data-action]');if(!button)return;const action=button.dataset.action;if(action==='back'){draft.step=Math.max(0,draft.step-1);save();await render();}else if(action==='add-damage'){const form=app.querySelector('form'),data=new FormData(form);const area=String(data.get('area')||'').trim(),description=String(data.get('description')||'').trim();if(!area||!description){error('Add the area and a description first.');return;}const id=crypto.randomUUID(),file=data.get('damagePhoto');if(file instanceof File&&file.size){if(!file.type.startsWith('image/')||file.size>12*1024*1024){error('Choose an image smaller than 12 MB.');return;}await photoAction('put',`damage-${id}`,file);}draft.damage.push({id,area,kind:String(data.get('kind')||'').trim(),description,photo:!!(file instanceof File&&file.size)});save();await render();}else if(action==='remove-damage'){const [removed]=draft.damage.splice(Number(button.dataset.index),1);if(removed?.photo)await photoAction('delete',`damage-${removed.id}`);save();await render();}else if(action==='restart'){if(!confirm('Delete this draft and all its photos from this browser?'))return;const tx=db.transaction('photos','readwrite');tx.objectStore('photos').clear();await new Promise(resolve=>tx.oncomplete=resolve);draft=fresh();save();await render();}else if(action==='print'){window.print();}window.scrollTo({top:0,behavior:'smooth'});});
-try{db=await openDB();await render();}catch{app.innerHTML='<div class="honesty-box">This browser cannot save a local draft. Try a regular browser window with device storage enabled.</div>';}
+app.addEventListener('click',async event=>{const button=event.target.closest('[data-action]');if(!button)return;const action=button.dataset.action;if(action==='back'){draft.step=Math.max(0,draft.step-1);save();await render();}else if(action==='add-damage'){if(draft.damage.length>=20){error('This preview allows up to 20 marks.');return;}const form=app.querySelector('form'),data=new FormData(form);const area=String(data.get('area')||'').trim(),description=String(data.get('description')||'').trim();if(!area||!description){error('Add the area and a description first.');return;}const id=crypto.randomUUID(),file=data.get('damagePhoto');if(file instanceof File&&file.size){if(!file.type.startsWith('image/')||file.size>12*1024*1024){error('Choose an image smaller than 12 MB.');return;}await photoAction('put',`damage-${id}`,file);}draft.damage.push({id,area,kind:String(data.get('kind')||'').trim(),description,photo:!!(file instanceof File&&file.size)});save();await render();}else if(action==='remove-damage'){const [removed]=draft.damage.splice(Number(button.dataset.index),1);if(removed?.photo)await photoAction('delete',`damage-${removed.id}`);save();await render();}else if(action==='checkout'){await startCheckout();}else if(action==='complete-online'){await completeOnline();}else if(action==='restart'){if(localStorage.getItem(pendingKey)){onlineStatus('Complete the test online record before deleting these local photos.');return;}if(!confirm('Delete this draft and all its photos from this browser?'))return;const tx=db.transaction('photos','readwrite');tx.objectStore('photos').clear();await new Promise(resolve=>tx.oncomplete=resolve);draft=fresh();save();await render();}else if(action==='print'){window.print();}window.scrollTo({top:0,behavior:'smooth'});});
+try{db=await openDB();try{onlineConfig=await (await fetch('/api/config')).json();}catch{}if(new URLSearchParams(location.search).get('checkout')==='cancelled')localStorage.removeItem(pendingKey);await render();}catch{app.innerHTML='<div class="honesty-box">This browser cannot save a local draft. Try a regular browser window with device storage enabled.</div>';}
