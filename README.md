@@ -17,7 +17,7 @@ The existing Cloudflare Pages project builds with command `npm run build`, outpu
 ## Online record architecture
 
 1. The visitor completes all eight exterior photos in the local walkthrough.
-2. A Turnstile-verified request creates a pending record in D1 and a Stripe **test-mode** Checkout Session for a one-time price.
+2. A Turnstile-verified request creates a pending record in D1 and a Stripe Checkout Session for a one-time price. Live checkout verifies the Stripe price is active, GBP £4.99 and one-time before creating a pending record.
 3. Stripe's signed webhook marks the record paid. The return page then uploads each original image through authenticated Pages Functions to a **private** R2 bucket.
 4. D1 stores photo metadata and SHA-256 digests. Finalization requires all eight views, writes a JSON manifest to R2, and records its digest and a server receipt time in D1.
 5. A secret access link opens the saved record. The browser fetches private photos and can print or save the record as a PDF.
@@ -54,7 +54,7 @@ The browser PDF costs no server processing. It is a summary of what is shown in 
 
 ## Next steps before a real paid launch
 
-- The proposed first price is **£4.99 per vehicle record**, with **12 months of online access**. Access expiry is enforced in code; the Stripe price and cleanup Worker are not yet live.
+- The first live price ID has been created in Stripe for **£4.99 per vehicle record**, with **12 months of online access**. Access expiry is enforced in code; configure the live Stripe price in Pages only after verifying its amount and mode in Stripe. The separate retention Worker has been configured by the owner, but its first scheduled run and logs have not yet been observed.
 - The support address is `support@howitwas.co`. Confirm forwarding continues to work, and decide how refunds will be handled.
 - A customer with the private link can permanently delete the record and photos. Support can rotate a lost link after verifying the requester against Stripe (instructions below).
 - Add operational cleanup of abandoned payment sessions and orphaned uploads.

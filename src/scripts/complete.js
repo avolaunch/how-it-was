@@ -50,7 +50,7 @@ async function complete(){
 
     const link=new URL('/vehicle-transport/record/?id='+encodeURIComponent(pending.id),location.origin);
     link.hash=pending.token;
-    progress('Your private record is ready.','All photos are saved. Keep the private link below; it cannot be recovered by email in this test version.');
+    progress('Your private record is ready.','All photos are saved. Keep the private link below. If you lose it, contact support@howitwas.co with the email used at checkout; support can verify payment and replace the link.');
     const url=document.createElement('a');url.href=link.href;url.textContent=link.href;url.className='completion-link';
     const row=document.createElement('div');row.className='step-actions';
     const open=document.createElement('a');open.href=link.href;open.className='button button-primary';open.textContent='Open saved record ↗';
