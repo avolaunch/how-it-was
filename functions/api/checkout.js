@@ -1,4 +1,5 @@
 import {configured,fail,json,normalize,paymentMode,randomToken,sameOrigin,sha256,verifyTurnstile} from '../../server/records.js';
+import {selectPrice,stripePriceMatches} from '../../server/pricing.js';
 
 export async function onRequestPost({request,env}) {
   if (!sameOrigin(request)) return fail('Invalid origin',403);
@@ -10,15 +11,17 @@ export async function onRequestPost({request,env}) {
     input = await request.json();
     details = normalize(input);
   } catch (error) { return fail(error.message || 'Invalid details'); }
+  const selected=selectPrice(env,input.currency);
+  if (!selected) return fail('Choose an available payment currency.');
   if (!await verifyTurnstile(input.turnstileToken,request.headers.get('CF-Connecting-IP'),env.TURNSTILE_SECRET)) return fail('Please complete the verification',403);
 
   if (paymentMode(env) === 'live') {
     try {
-      const response = await fetch('https://api.stripe.com/v1/prices/'+encodeURIComponent(env.STRIPE_PRICE_ID),{
+      const response = await fetch('https://api.stripe.com/v1/prices/'+encodeURIComponent(selected.id),{
         headers:{authorization:'Bearer '+env.STRIPE_SECRET_KEY}
       });
       const price = await response.json();
-      if (!response.ok || price.livemode !== true || price.active !== true || price.type !== 'one_time' || price.currency !== 'gbp' || price.unit_amount !== 499) {
+      if (!response.ok || !stripePriceMatches(price,selected,true)) {
         return fail('Online checkout is temporarily unavailable. Please contact support.',503);
       }
     } catch { return fail('Online checkout is temporarily unavailable. Please try again later.',503); }
@@ -30,12 +33,15 @@ export async function onRequestPost({request,env}) {
 
   const form = new URLSearchParams({
     mode:'payment',
-    'line_items[0][price]':env.STRIPE_PRICE_ID,
+    'line_items[0][price]':selected.id,
     'line_items[0][quantity]':'1',
+    currency:selected.currency,
+    'adaptive_pricing[enabled]':'false',
     client_reference_id:id,
     'metadata[record_id]':id,
+    'metadata[currency]':selected.currency,
     success_url:env.APP_ORIGIN+'/vehicle-transport/complete/',
-    cancel_url:env.APP_ORIGIN+'/vehicle-transport/capture/?checkout=cancelled',
+    cancel_url:env.APP_ORIGIN+'/vehicle-transport/capture/?checkout=cancelled&currency='+selected.currency,
   });
   let session;
   try {
