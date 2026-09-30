@@ -1,5 +1,5 @@
 import {configured,fail,json,normalize,paymentMode,randomToken,sameOrigin,sha256,verifyTurnstile} from '../../server/records.js';
-import {selectPrice,stripePriceMatches} from '../../server/pricing.js';
+import {selectPrice,loadPrices} from '../../server/pricing.js';
 
 export async function onRequestPost({request,env}) {
   if (!sameOrigin(request)) return fail('Invalid origin',403);
@@ -11,21 +11,12 @@ export async function onRequestPost({request,env}) {
     input = await request.json();
     details = normalize(input);
   } catch (error) { return fail(error.message || 'Invalid details'); }
-  const selected=selectPrice(env,input.currency);
-  if (!selected) return fail('Choose an available payment currency.');
   if (!await verifyTurnstile(input.turnstileToken,request.headers.get('CF-Connecting-IP'),env.TURNSTILE_SECRET)) return fail('Please complete the verification',403);
-
-  if (paymentMode(env) === 'live') {
-    try {
-      const response = await fetch('https://api.stripe.com/v1/prices/'+encodeURIComponent(selected.id)+'?expand[]=currency_options',{
-        headers:{authorization:'Bearer '+env.STRIPE_SECRET_KEY}
-      });
-      const price = await response.json();
-      if (!response.ok || !stripePriceMatches(price,selected,true)) {
-        return fail('Online checkout is temporarily unavailable. Please contact support.',503);
-      }
-    } catch { return fail('Online checkout is temporarily unavailable. Please try again later.',503); }
-  }
+  let prices;
+  try { prices=await loadPrices(env,paymentMode(env)==='live'); }
+  catch { return fail('Online checkout is temporarily unavailable. Please try again later.',503); }
+  const selected=selectPrice(prices,input.currency);
+  if (!selected) return fail('Choose an available payment currency.');
 
   const id = crypto.randomUUID(), token = randomToken(), now = new Date().toISOString();
   await env.DB.prepare('INSERT INTO records (id,access_hash,vehicle_json,transport_json,damage_json,created_at) VALUES (?,?,?,?,?,?)')
