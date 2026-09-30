@@ -17,7 +17,7 @@ export async function onRequestPost({request,env}) {
 
   if (paymentMode(env) === 'live') {
     try {
-      const response = await fetch('https://api.stripe.com/v1/prices/'+encodeURIComponent(selected.id),{
+      const response = await fetch('https://api.stripe.com/v1/prices/'+encodeURIComponent(selected.id)+'?expand[]=currency_options',{
         headers:{authorization:'Bearer '+env.STRIPE_SECRET_KEY}
       });
       const price = await response.json();

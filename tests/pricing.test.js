@@ -45,7 +45,7 @@ test('checkout charges the selected fixed price and refuses unconfigured or mism
   t.mock.method(globalThis,'fetch',async(url,options)=>{
     if(String(url).includes('turnstile'))return Response.json({success:true});
     if(String(url).includes('/prices/')) {
-      assert.equal(String(url),'https://api.stripe.com/v1/prices/price_zar');
+      assert.equal(String(url),'https://api.stripe.com/v1/prices/price_zar?expand[]=currency_options');
       return Response.json({livemode:true,active:true,type:'one_time',currency:'zar',unit_amount:priceAmount});
     }
     sessionCalls++;
@@ -69,4 +69,33 @@ test('checkout charges the selected fixed price and refuses unconfigured or mism
   assert.equal((await checkout({env,request:request('usd')})).status,400);
   delete env.STRIPE_PRICE_ID_ZAR;
   assert.equal((await checkout({env,request:request('zar')})).status,400);
+});
+
+
+test('multi-currency price validates the exact selected currency amount',()=>{
+  const expected=selectPrice(environment(),'zar');
+  const price={livemode:true,active:true,type:'one_time',currency:'gbp',unit_amount:499,currency_options:{zar:{unit_amount:9900}}};
+  assert.equal(stripePriceMatches(price,expected,true),true);
+  assert.equal(stripePriceMatches({...price,currency_options:{zar:{unit_amount:99}}},expected,true),false);
+  assert.equal(stripePriceMatches({...price,currency_options:{}},expected,true),false);
+  assert.equal(stripePriceMatches(price,expected,false),false);
+});
+
+test('checkout supports the same price ID for GBP and its ZAR currency option',async t=>{
+  const env=environment();
+  env.STRIPE_PRICE_ID_ZAR=env.STRIPE_PRICE_ID;
+  t.mock.method(globalThis,'fetch',async(url,options)=>{
+    if(String(url).includes('turnstile')) return Response.json({success:true});
+    if(String(url).includes('/prices/')) {
+      assert.equal(String(url),'https://api.stripe.com/v1/prices/price_gbp?expand[]=currency_options');
+      return Response.json({livemode:true,active:true,type:'one_time',currency:'gbp',unit_amount:499,currency_options:{zar:{unit_amount:9900}}});
+    }
+    const form=new URLSearchParams(options.body);
+    assert.equal(form.get('line_items[0][price]'),'price_gbp');
+    assert.equal(form.get('currency'),'zar');
+    return Response.json({id:'cs_live_example',url:'https://checkout.stripe.com/c/pay/example'});
+  });
+  const request=new Request(env.APP_ORIGIN+'/api/checkout',{method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({vehicle:{registration:'ABC',make:'Test',model:'Car'},currency:'zar',turnstileToken:'token'})});
+  assert.equal((await checkout({env,request})).status,200);
 });

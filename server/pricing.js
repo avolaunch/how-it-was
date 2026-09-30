@@ -12,5 +12,7 @@ export function selectPrice(env, currency = 'gbp') {
 }
 
 export function stripePriceMatches(price, expected, live) {
-  return Boolean(expected && price.livemode===live && price.active===true && price.type==='one_time' && price.currency===expected.currency && price.unit_amount===expected.amount);
+  if (!expected || price.livemode!==live || price.active!==true || price.type!=='one_time') return false;
+  const amount = price.currency===expected.currency ? price.unit_amount : price.currency_options?.[expected.currency]?.unit_amount;
+  return amount===expected.amount;
 }
