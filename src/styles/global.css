@@ -21,3 +21,5 @@
 .legal-page{max-width:850px;padding-block:65px 100px}.legal-page h1{font-size:clamp(40px,6vw,64px);line-height:1.1;margin:16px 0 28px}.legal-page h2{font-size:24px;line-height:1.25;margin:36px 0 12px}.legal-page p{font-size:15px;line-height:1.75;color:var(--muted);margin:0 0 14px}.legal-page a,.checkout-consent a{color:var(--blue);text-decoration:underline}.checkout-consent{display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.55;margin:18px 0}.checkout-consent input{width:18px;height:18px;flex:0 0 18px;margin:1px 0 0}
 
 .currency-choice{max-width:280px;margin:18px 0}.currency-choice select{font-weight:700}
+
+.share-panel{margin-top:28px;padding:24px;background:#f3f6fb;border:1px solid #dce3ef;border-radius:14px}.share-panel h3{margin-top:0}.share-panel form{margin-top:24px}.share-panel textarea{width:100%;max-width:100%;resize:vertical}.share-panel [role="status"]{overflow-wrap:anywhere}.share-panel .step-actions{flex-wrap:wrap}@media(max-width:600px){.share-panel{padding:18px}.share-panel .button{width:100%;text-align:center}}

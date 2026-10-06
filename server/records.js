@@ -48,8 +48,15 @@ export async function authorize(context) {
   const token = context.request.headers.get('authorization')?.replace(/^Bearer /i,'') || '';
   if (!/^[0-9a-f-]{36}$/i.test(id) || !/^[0-9a-f]{64}$/i.test(token)) return null;
   const row = await context.env.DB.prepare('SELECT * FROM records WHERE id = ?').bind(id).first();
-  if (!row || row.access_hash !== await sha256(token) || (row.status === 'finalized' && expired(row.finalized_at))) return null;
-  return row;
+  if (!row || (row.status === 'finalized' && expired(row.finalized_at))) return null;
+  const hash=await sha256(token);
+  if(row.access_hash===hash)return row;
+  if(context.request.method!=='GET' || row.status!=='finalized')return null;
+  try{
+    const viewer=await context.env.DB.prepare('SELECT access_hash,owner_hash FROM record_viewers WHERE record_id=?').bind(id).first();
+    if(viewer?.access_hash===hash && viewer.owner_hash===row.access_hash)return {...row,viewerAccess:true};
+  }catch{}
+  return null;
 }
 export function validPhotoKey(key, damage) {
   return requiredViews.includes(key) || optionalViews.includes(key) ||

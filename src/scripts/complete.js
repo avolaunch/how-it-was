@@ -53,7 +53,7 @@ async function complete(){
     progress('Your private record is ready.','All photos are saved. Keep the private link below. If you lose it, contact support@howitwas.co with the email used at checkout; support can verify payment and replace the link.');
     const url=document.createElement('a');url.href=link.href;url.textContent=link.href;url.className='completion-link';
     const row=document.createElement('div');row.className='step-actions';
-    const open=document.createElement('a');open.href=link.href;open.className='button button-primary';open.textContent='Open saved record ↗';
+    const open=document.createElement('a');open.href=link.href;open.className='button button-primary';open.textContent='Open, download or share record ↗';
     const copy=document.createElement('button');copy.type='button';copy.className='button button-light';copy.textContent='Copy private link';
     copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(link.href);copy.textContent='Copied';}catch{copy.textContent='Select and copy the link above';}});
     row.append(open,copy);status.after(url,row);
