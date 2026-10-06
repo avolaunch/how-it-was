@@ -1,3 +1,4 @@
+import {creatorAddress,ensureCreatorContacts} from '../../server/creator-email.js';
 import {configured,fail,json,normalize,paymentMode,randomToken,sameOrigin,sha256,verifyTurnstile} from '../../server/records.js';
 import {selectPrice,loadPrices} from '../../server/pricing.js';
 
@@ -6,10 +7,11 @@ export async function onRequestPost({request,env}) {
   if (!configured(env)) return fail('Online records are not configured',503);
   if (new URL(request.url).origin !== env.APP_ORIGIN) return fail('Use the configured site origin',403);
   if (Number(request.headers.get('content-length') || 0) > 16000) return fail('Request too large',413);
-  let input, details;
+  let input, details, creatorEmail;
   try {
     input = await request.json();
     details = normalize(input);
+    creatorEmail=creatorAddress(input.creatorEmail);
   } catch (error) { return fail(error.message || 'Invalid details'); }
   if (!await verifyTurnstile(input.turnstileToken,request.headers.get('CF-Connecting-IP'),env.TURNSTILE_SECRET)) return fail('Please complete the verification',403);
   let prices;
@@ -19,8 +21,10 @@ export async function onRequestPost({request,env}) {
   if (!selected) return fail('Choose an available payment currency.');
 
   const id = crypto.randomUUID(), token = randomToken(), now = new Date().toISOString();
+  await ensureCreatorContacts(env);
   await env.DB.prepare('INSERT INTO records (id,access_hash,vehicle_json,transport_json,damage_json,created_at) VALUES (?,?,?,?,?,?)')
     .bind(id,await sha256(token),JSON.stringify(details.vehicle),JSON.stringify(details.transport),JSON.stringify(details.damage),now).run();
+  await env.DB.prepare('INSERT INTO creator_contacts (record_id,email,owner_hash) VALUES (?,?,?)').bind(id,creatorEmail,await sha256(token)).run();
 
   const form = new URLSearchParams({
     mode:'payment',

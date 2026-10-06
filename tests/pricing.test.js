@@ -17,7 +17,7 @@ function stripePrice() {
 }
 function request(env,currency='zar') {
   return new Request(env.APP_ORIGIN+'/api/checkout',{method:'POST',headers:{'content-type':'application/json'},
-    body:JSON.stringify({vehicle:{registration:'ABC',make:'Test',model:'Car'},currency,amount:1,priceId:'price_attacker',turnstileToken:'token'})});
+    body:JSON.stringify({vehicle:{registration:'ABC',make:'Test',model:'Car'},currency,creatorEmail:'creator@example.com',amount:1,priceId:'price_attacker',turnstileToken:'token'})});
 }
 
 test('all configured markets share one price ID and use Stripe amounts',()=>{
@@ -88,6 +88,8 @@ test('checkout uses one ID, refreshes amounts, and rejects unavailable currency 
   });
   assert.equal((await checkout({env,request:request(env)})).status,200);
   assert.equal(sessionCalls,1);
+  const contact=writes.find(write=>write.sql.startsWith('INSERT INTO creator_contacts'));
+  assert.equal(contact.args[1],'creator@example.com');
   writes.length=0;
   delete price.currency_options.zar;
   assert.equal((await checkout({env,request:request(env)})).status,400);

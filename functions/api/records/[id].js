@@ -1,3 +1,4 @@
+import {creatorContact} from '../../../server/creator-email.js';
 import {sharingEnabled,viewerLink} from '../../../server/sharing.js';
 import {authorize,fail,json,sameOrigin} from '../../../server/records.js';
 import {deleteRecord} from '../../../server/retention.js';
@@ -10,7 +11,9 @@ export async function onRequestGet(context) {
     if(row.viewerAccess){const url=new URL('/vehicle-transport/record/?id='+encodeURIComponent(row.id),context.env.APP_ORIGIN);url.hash=context.request.headers.get('authorization').replace(/^Bearer /i,'');shareLink=url.href;}
     else {try{shareLink=await viewerLink(context.env,row,context.request.headers.get('authorization').replace(/^Bearer /i,''));}catch{}}
   }
-  return json({canManage:!row.viewerAccess,shareLink,id:row.id,status:row.status,createdAt:row.created_at,paidAt:row.paid_at,finalizedAt:row.finalized_at,
+  let creatorEmail=null;
+  if(!row.viewerAccess){try{const contact=await creatorContact(context.env,row.id);if(contact)creatorEmail={email:contact.email,status:contact.status};}catch{}}
+  return json({creatorEmail,canManage:!row.viewerAccess,shareLink,id:row.id,status:row.status,createdAt:row.created_at,paidAt:row.paid_at,finalizedAt:row.finalized_at,
     manifest:row.status==='finalized'?JSON.parse(row.manifest_json):null,manifestSha256:row.manifest_sha256,emailSharingEnabled:!row.viewerAccess && sharingEnabled(context.env)});
 }
 export async function onRequestDelete(context) {

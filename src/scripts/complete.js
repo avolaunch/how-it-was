@@ -45,18 +45,23 @@ async function complete(){
         await responseData(await fetch(root+'/photos/'+encodeURIComponent(key),{method:'PUT',headers:{...headers,'content-type':photo.type},body:photo}));
       }
       progress('Finishing your record…','Your photos have uploaded. Saving the final record now.');
-      await responseData(await fetch(root+'/finalize',{method:'POST',headers}));
+
     }else if(record.status!=='finalized')throw Error('This payment is not ready to save a record.');
 
+    const final=await responseData(await fetch(root+'/finalize',{method:'POST',headers}));
+    const email=final.creatorEmail;
     const link=new URL('/vehicle-transport/record/?id='+encodeURIComponent(pending.id),location.origin);
     link.hash=pending.token;
-    progress('Your private record is ready.','All photos are saved. Keep the private link below. If you lose it, contact support@howitwas.co with the email used at checkout; support can verify payment and replace the link.');
+    const emailMessage=email?.status==='queued'?'Your creator link has been queued for email to '+email.email+'. Check your inbox and spam folder.':email?.status==='pending'?'Your record is saved, but the creator email has not been queued yet. Keep the link below and retry the email.':email?.status==='support_required'?'Your record is saved. Contact support@howitwas.co for help with the creator email.':'Keep your creator link below. You can email it to yourself from the saved record page.';
+    progress('Your private record is ready.','All photos are saved. '+emailMessage+' Keep your creator link private; use the sharing options inside your record for recipients.');
+    document.querySelectorAll('.completion-link,.completion-ready-actions').forEach(element=>element.remove());
     const url=document.createElement('a');url.href=link.href;url.textContent=link.href;url.className='completion-link';
-    const row=document.createElement('div');row.className='step-actions';
+    const row=document.createElement('div');row.className='step-actions completion-ready-actions';
     const open=document.createElement('a');open.href=link.href;open.className='button button-primary';open.textContent='Open, download or share record ↗';
     const copy=document.createElement('button');copy.type='button';copy.className='button button-light';copy.textContent='Copy private link';
     copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(link.href);copy.textContent='Copied';}catch{copy.textContent='Select and copy the link above';}});
-    row.append(open,copy);status.after(url,row);
+    row.append(open,copy);
+    if(email?.status==='pending'){const send=document.createElement('button');send.type='button';send.className='button button-light';send.textContent='Retry creator email';send.addEventListener('click',()=>{send.disabled=true;complete();});row.append(send);}status.after(url,row);
   }catch(error){fail(error.message||'The upload did not finish.');}
   finally{running=false;}
 }
